@@ -52,7 +52,7 @@ export default function TaskToolbar({
 
           <SelectContent>
             <SelectItem value="All">All Status</SelectItem>
-            <SelectItem value="Pending">Pending</SelectItem>
+            <SelectItem value="Todo">Todo</SelectItem>
             <SelectItem value="In Progress">In Progress</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
           </SelectContent>

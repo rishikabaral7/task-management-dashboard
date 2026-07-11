@@ -1,15 +1,36 @@
 "use client";
 
 import {
+  AlertTriangle,
   CheckCircle2,
   ListTodo,
   TrendingUp,
-  AlertTriangle,
 } from "lucide-react";
 
 import StatsCard from "@/components/dashboard/StatsCard";
+import { useGetTasksQuery } from "@/services/taskApi";
+
+type TaskSummary = {
+  status?: string;
+  priority?: string;
+};
 
 export default function DashboardPage() {
+  const { data: tasks = [] } = useGetTasksQuery();
+
+  const stats = {
+    totalTasks: tasks.length,
+    completedTasks: tasks.filter(
+      (task: TaskSummary) => task.status === "Completed",
+    ).length,
+    pendingTasks: tasks.filter(
+      (task: TaskSummary) => task.status !== "Completed",
+    ).length,
+    highPriorityTasks: tasks.filter(
+      (task: TaskSummary) => task.priority === "High",
+    ).length,
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -20,10 +41,26 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatsCard title="Total Tasks" value={24} icon={ListTodo} />
-        <StatsCard title="Completed" value={12} icon={CheckCircle2} />
-        <StatsCard title="Pending" value={8} icon={AlertTriangle} />
-        <StatsCard title="High Priority" value={4} icon={TrendingUp} />
+        <StatsCard
+          title="Total Tasks"
+          value={stats.totalTasks}
+          icon={ListTodo}
+        />
+        <StatsCard
+          title="Completed"
+          value={stats.completedTasks}
+          icon={CheckCircle2}
+        />
+        <StatsCard
+          title="Pending"
+          value={stats.pendingTasks}
+          icon={AlertTriangle}
+        />
+        <StatsCard
+          title="High Priority"
+          value={stats.highPriorityTasks}
+          icon={TrendingUp}
+        />
       </div>
     </div>
   );

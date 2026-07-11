@@ -1,36 +1,59 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, GripVertical } from "lucide-react";
+import { toast } from "sonner";
 
 import TaskCard from "@/components/task/TaskCard";
 import TaskDialog from "@/components/task/TaskDialog";
 import TaskEmptyState from "@/components/task/TaskEmptyState";
 import TaskSkeleton from "@/components/task/TaskSkeleton";
 import TaskToolbar from "@/components/task/TaskToolbar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useDeleteTaskMutation, useGetTasksQuery } from "@/services/taskApi";
-import { toast } from "sonner";
 
 export default function TasksPage() {
   const [open, setOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [taskToDelete, setTaskToDelete] = useState<any>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [priority, setPriority] = useState("All");
   const [sort, setSort] = useState("Newest");
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [orderedTasks, setOrderedTasks] = useState<any[]>([]);
 
+  const debouncedSearch = useDebounce(search, 250);
   const { data: tasks = [], isLoading, error } = useGetTasksQuery();
-
   const [deleteTask] = useDeleteTaskMutation();
 
+  useEffect(() => {
+    if (tasks.length) {
+      setOrderedTasks(tasks);
+    }
+  }, [tasks]);
+
   const filteredTasks = useMemo(() => {
-    let filtered = tasks.filter((task: any) => {
+    let filtered = orderedTasks.filter((task: any) => {
+      const description = task.description?.toLowerCase() ?? "";
       const matchesSearch =
-        task.title.toLowerCase().includes(search.toLowerCase()) ||
-        task.description.toLowerCase().includes(search.toLowerCase());
+        task.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        description.includes(debouncedSearch.toLowerCase());
 
       const matchesStatus = status === "All" || task.status === status;
-
       const matchesPriority = priority === "All" || task.priority === priority;
 
       return matchesSearch && matchesStatus && matchesPriority;
@@ -53,21 +76,45 @@ export default function TasksPage() {
       filtered = [...filtered].reverse();
     }
 
-    if (sort === "Oldest") {
-      filtered = [...filtered];
-    }
-
     return filtered;
-  }, [tasks, search, status, priority, sort]);
+  }, [orderedTasks, debouncedSearch, status, priority, sort]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!taskToDelete) return;
+
     try {
-      await deleteTask(id).unwrap();
-
+      await deleteTask(taskToDelete.id).unwrap();
       toast.success("Task deleted successfully");
-    } catch (error) {
+      setTaskToDelete(null);
+    } catch {
       toast.error("Failed to delete task");
     }
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!draggedTaskId || draggedTaskId === targetId) {
+      setDraggedTaskId(null);
+      return;
+    }
+
+    setOrderedTasks((currentTasks) => {
+      const reordered = [...currentTasks];
+      const fromIndex = reordered.findIndex(
+        (task) => task.id === draggedTaskId,
+      );
+      const toIndex = reordered.findIndex((task) => task.id === targetId);
+
+      if (fromIndex < 0 || toIndex < 0) {
+        return currentTasks;
+      }
+
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      return reordered;
+    });
+
+    toast.success("Task ordering updated");
+    setDraggedTaskId(null);
   };
 
   if (isLoading) {
@@ -75,12 +122,32 @@ export default function TasksPage() {
   }
 
   if (error) {
-    return <h1>Error fetching tasks.</h1>;
+    return (
+      <Alert variant="destructive" className="max-w-xl">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Unable to load tasks</AlertTitle>
+        <AlertDescription>
+          The task service could not be reached. Please refresh the page or try
+          again shortly.
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   return (
-    <div>
-      <h1 className="mb-6 text-3xl font-bold">Tasks</h1>
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="space-y-6">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Tasks</h1>
+          <p className="text-sm text-muted-foreground">
+            Track your priorities and keep work moving forward.
+          </p>
+        </div>
+      </div>
 
       <TaskToolbar
         search={search}
@@ -106,17 +173,37 @@ export default function TasksPage() {
             }}
           />
         ) : (
-          filteredTasks.map((task: any) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onEdit={() => {
-                setSelectedTask(task);
-                setOpen(true);
-              }}
-              onDelete={() => handleDelete(task.id)}
-            />
-          ))
+          <AnimatePresence mode="popLayout">
+            {filteredTasks.map((task: any) => (
+              <motion.div
+                key={task.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                draggable
+                onDragStart={() => setDraggedTaskId(task.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => handleDrop(task.id)}
+                onDragEnd={() => setDraggedTaskId(null)}>
+                <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+                  <GripVertical className="h-4 w-4" />
+                  <span className="text-xs uppercase tracking-wide">
+                    Drag to reorder
+                  </span>
+                </div>
+                <TaskCard
+                  task={task}
+                  onEdit={() => {
+                    setSelectedTask(task);
+                    setOpen(true);
+                  }}
+                  onDelete={() => setTaskToDelete(task)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
       </div>
 
@@ -131,6 +218,28 @@ export default function TasksPage() {
         }}
         task={selectedTask}
       />
-    </div>
+
+      <AlertDialog
+        open={Boolean(taskToDelete)}
+        onOpenChange={(value) => {
+          if (!value) {
+            setTaskToDelete(null);
+          }
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The task will be removed from your
+              list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </motion.div>
   );
 }
