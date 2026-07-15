@@ -20,6 +20,8 @@ export default function ProtectedRoute({
     const authState = state.auth as AuthState | undefined;
     return authState?.isAuthenticated ?? false;
   });
+   console.log("ProtectedRoute rendered");
+  console.log("isAuthenticated:", isAuthenticated);
 
   useEffect(() => {
     if (!isAuthenticated) {
